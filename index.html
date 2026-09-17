@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<title>Pac-Man</title>
+
+<style>
+*{
+    box-sizing:border-box;
+    -webkit-tap-highlight-color:transparent;
+}
+
+body{
+    margin:0;
+    background:#000;
+    color:white;
+    font-family:Arial,sans-serif;
+    overflow:hidden;
+    touch-action:none;
+}
+
+#menu{
+    position:fixed;
+    inset:0;
+    background:#000;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    z-index:10;
+}
+
+.logo{
+    font-size:clamp(50px,14vw,100px);
+    font-weight:bold;
+    color:#ffe000;
+    text-shadow:0 0 20px #ffe000;
+    margin-bottom:10px;
+}
+
+.subtitle{
+    font-size:18px;
+    margin-bottom:35px;
+}
+
+#start{
+    border:0;
+    background:#ffe000;
+    color:#000;
+    font-size:22px;
+    font-weight:bold;
+    padding:15px 40px;
+    border-radius:10px;
+}
+
+#game{
+    width:100%;
+    min-height:100vh;
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+}
+
+.top{
+    width:min(92vw,600px);
+    display:flex;
+    justify-content:space-between;
+    font-size:20px;
+    font-weight:bold;
+    margin-bottom:8px;
+}
+
+canvas{
+    width:min(92vw,600px);
+    height:auto;
+    background:#000;
+    image-rendering:pixelated;
+}
+
+#message{
+    height:30px;
+    color:#ffe000;
+    font-size:20px;
+    font-weight:bold;
+}
+
+#controls{
+    display:grid;
+    grid-template-columns:70px 70px 70px;
+    grid-template-rows:60px 60px;
+    gap:6px;
+}
+
+.control{
+    background:#151515;
+    color:white;
+    border:2px solid #555;
+    border-radius:12px;
+    font-size:27px;
+    font-weight:bold;
+}
+
+.up{
+    grid-column:2;
+}
+
+.left{
+    grid-column:1;
+    grid-row:2;
+}
+
+.down{
+    grid-column:2;
+    grid-row:2;
+}
+
+.right{
+    grid-column:3;
+    grid-row:2;
+}
+
+#restart{
+    margin-top:8px;
+    padding:7px 18px;
+    background:#111;
+    color:white;
+    border:1px solid #555;
+    border-radius:8px;
+    display:none;
+}
+</style>
+</head>
+
+<body>
+
+<div id="menu">
+
+    <div class="logo">PAC-MAN</div>
+
+    <div class="subtitle">
+        CLASSIC MAZE
+    </div>
+
+    <button id="start">
+        ▶ JOUER
+    </button>
+
+</div>
+
+
+<div id="game">
+
+    <div class="top">
+
+        <span>
+            SCORE : <span id="score">0</span>
+        </span>
+
+        <span>
+            NIVEAU <span id="level">1</span>
+        </span>
+
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="message"></div>
+
+    <div id="controls">
+
+        <button class="control up" data-dir="up">▲</button>
+
+        <button class="control left" data-dir="left">◀</button>
+
+        <button class="control down" data-dir="down">▼</button>
+
+        <button class="control right" data-dir="right">▶</button>
+
+    </div>
+
+    <button id="restart">
+        ↻ Recommencer
+    </button>
+
+</div>
+
+
+<script>
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const scoreText = document.getElementById("score");
+const message = document.getElementById("message");
+const menu = document.getElementById("menu");
+const game = document.getElementById("game");
+const restart = document.getElementById("restart");
+const start = document.getElementById("start");
+
+
+// =========================
+// CONFIGURATION
+// =========================
+
+const TILE = 24;
+
+const COLS = 21;
+const ROWS = 23;
+
+canvas.width = COLS * TILE;
+canvas.height = ROWS * TILE;
+
+
+// =========================
+// CREATION DU LABYRINTHE
+// =========================
+
+let maze = [];
+
+function createMaze(){
+
+    maze = [];
+
+    for(let y=0;y<ROWS;y++){
+
+        maze[y]=[];
+
+        for(let x=0;x<COLS;x++){
+
+            if(
+                x===0 ||
+                y===0 ||
+                x===COLS-1 ||
+                y===ROWS-1
+            ){
+                maze[y][x]="#";
+            }
+            else{
+                maze[y][x]=".";
+            }
+        }
+    }
+
+
+    // blocs du labyrinthe
+
+    const blocks = [
+
+        [2,2,4,2],
+        [8,2,4,2],
+        [14,2,4,2],
+
+        [2,5,4,2],
+        [8,5,5,2],
+        [15,5,4,2],
+
+        [4,9,3,2],
+        [9,9,3,2],
+        [14,9,3,2],
+
+        [2,12,4,2],
+        [8,12,5,2],
+        [15,12,4,2],
+
+        [4,16,3,2],
+        [9,16,3,2],
+        [14,16,3,2],
+
+        [2,19,4,2],
+        [8,19,5,2],
+        [15,19,4,2]
+
+    ];
+
+
+    for(const block of blocks){
+
+        let [x,y,w,h]=block;
+
+        for(let yy=y;yy<y+h;yy++){
+
+            for(let xx=x;xx<x+w;xx++){
+
+                maze[yy][xx]="#";
+
+            }
+        }
+    }
+
+
+    // quelques ouvertures verticales
+
+    for(let y=3;y<20;y++){
+
+        if(y!==8 && y!==14){
+
+            maze[y][6]=".";
+            maze[y][14]=".";
+
+        }
+    }
+
+
+    // zone de départ de Pac-Man
+    // IL EST MAINTENANT TOUT EN BAS
+
+    for(let x=7;x<=13;x++){
+        maze[21][x]=".";
+    }
+
+
+    // zone centrale des fantômes
+
+    for(let y=9;y<=13;y++){
+
+        for(let x=8;x<=12;x++){
+
+            maze[y][x]=".";
+
+        }
+    }
+
+
+    // position Pac-Man
+
+    maze[21][10]=" ";
+
+}
+
+
+// =========================
+// PAC-MAN
+// =========================
+
+let pacman;
+
+function createPacman(){
+
+    pacman={
+
+        x:10,
+        y:21,
+
+        direction:{
+            x:0,
+            y:0
+        },
+
+        nextDirection:{
+            x:0,
+            y:0
+        },
+
+        mouth:0
+
+    };
+
+}
+
+
+// =========================
+// FANTÔMES
+// =========================
+
+let ghosts=[];
+
+function createGhosts(){
+
+    ghosts=[
+
+        {
+            x:10,
+            y:10,
+            color:"#ff0000",
+            direction:{x:1,y:0}
+        },
+
+        {
+            x:9,
+            y:10,
+            color:"#ff9de2",
+            direction:{x:-1,y:0}
+        },
+
+        {
+            x:11,
+            y:10,
+            color:"#00e5ff",
+            direction:{x:1,y:0}
+        },
+
+        {
+            x:10,
+            y:12,
+            color:"#ff9b39",
+            direction:{x:-1,y:0}
+        }
+
+    ];
+
+}
+
+
+// =========================
+// VARIABLES
+// =========================
+
+let score=0;
+
+let running=false;
+
+let lastTime=0;
+
+let playerTimer=0;
+
+let ghostTimer=0;
+
+
+// =========================
+// COLLISIONS
+// =========================
+
+function isOpen(x,y){
+
+    if(x<0 || x>=COLS || y<0 || y>=ROWS){
+        return false;
+    }
+
+    return maze[y][x]!="#";
+
+}
+
+
+// =========================
+// DIRECTION
+// =========================
+
+function changeDirection(direction){
+
+    pacman.nextDirection=direction;
+
+    if(
+        isOpen(
+            pacman.x + direction.x,
+            pacman.y + direction.y
+        )
+    ){
+
+        pacman.direction=direction;
+
+    }
+
+}
+
+
+// =========================
+// PAC-MAN
+// =========================
+
+function movePacman(){
+
+    const next=pacman.nextDirection;
+
+    if(
+        isOpen(
+            pacman.x+next.x,
+            pacman.y+next.y
+        )
+    ){
+
+        pacman.direction=next;
+
+    }
+
+
+    const d=pacman.direction;
+
+    if(
+        isOpen(
+            pacman.x+d.x,
+            pacman.y+d.y
+        )
+    ){
+
+        pacman.x+=d.x;
+        pacman.y+=d.y;
+
+    }
+
+
+    // mange la pastille
+
+    if(maze[pacman.y][pacman.x]==="."){
+
+        maze[pacman.y][pacman.x]=" ";
+
+        score+=10;
+
+        scoreText.textContent=score;
+
+    }
+
+}
+
+
+// =========================
+// FANTÔMES
+// =========================
+
+const directions=[
+
+    {x:1,y:0},
+    {x:-1,y:0},
+    {x:0,y:1},
+    {x:0,y:-1}
+
+];
+
+
+function moveGhost(ghost){
+
+    let possible=directions.filter(d=>
+
+        isOpen(
+            ghost.x+d.x,
+            ghost.y+d.y
+        )
+
+    );
+
+
+    if(possible.length===0){
+        return;
+    }
+
+
+    // éviter de repartir directement en arrière
+
+    let reverse={
+
+        x:-ghost.direction.x,
+        y:-ghost.direction.y
+
+    };
+
+
+    let choices=possible.filter(d=>
+
+        !(d.x===reverse.x && d.y===reverse.y)
+
+    );
+
+
+    if(choices.length===0){
+
+        choices=possible;
+
+    }
+
+
+    // poursuite de Pac-Man
+
+    choices.sort((a,b)=>{
+
+        let da=
+            Math.abs(
+                ghost.x+a.x-pacman.x
+            )
+            +
+            Math.abs(
+                ghost.y+a.y-pacman.y
+            );
+
+        let db=
+            Math.abs(
+                ghost.x+b.x-pacman.x
+            )
+            +
+            Math.abs(
+                ghost.y+b.y-pacman.y
+            );
+
+        return da-db;
+
+    });
+
+
+    ghost.direction=choices[0];
+
+    ghost.x+=ghost.direction.x;
+
+    ghost.y+=ghost.direction.y;
+
+}
+
+
+// =========================
+// COLLISION FANTÔME
+// =========================
+
+function checkGhostCollision(){
+
+    for(const ghost of ghosts){
+
+        if(
+            ghost.x===pacman.x &&
+            ghost.y===pacman.y
+        ){
+
+            lose();
+
+            return;
+
+        }
+
+    }
+
+}
+
+
+// =========================
+// DESSIN DU LABYRINTHE
+// =========================
+
+function drawMaze(){
+
+    ctx.fillStyle="#000";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    for(let y=0;y<ROWS;y++){
+
+        for(let x=0;x<COLS;x++){
+
+            let px=x*TILE;
+            let py=y*TILE;
+
+
+            if(maze[y][x]==="#"){
+
+                ctx.fillStyle="#1111dd";
+
+                ctx.fillRect(
+                    px+1,
+                    py+1,
+                    TILE-2,
+                    TILE-2
+                );
+
+
+                ctx.strokeStyle="#3434ff";
+
+                ctx.strokeRect(
+                    px+3,
+                    py+3,
+                    TILE-6,
+                    TILE-6
+                );
+
+            }
+
+
+            else if(maze[y][x]==="."){
+
+                ctx.fillStyle="#fff";
+
+                ctx.beginPath();
+
+                ctx.arc(
+                    px+TILE/2,
+                    py+TILE/2,
+                    2.5,
+                    0,
+                    Math.PI*2
+                );
+
+                ctx.fill();
+
+            }
+
+        }
+
+    }
+
+}
+
+
+// =========================
+// DESSIN PAC-MAN
+// =========================
+
+function drawPacman(){
+
+    const cx=
+        pacman.x*TILE+TILE/2;
+
+    const cy=
+        pacman.y*TILE+TILE/2;
+
+
+    let angle=
+        Math.atan2(
+            pacman.direction.y,
+            pacman.direction.x
+        );
+
+
+    if(
+        pacman.direction.x===0 &&
+        pacman.direction.y===0
+    ){
+
+        angle=-Math.PI/2;
+
+    }
+
+
+    let mouth=
+        0.25+
+        Math.abs(
+            Math.sin(pacman.mouth)
+        )*0.25;
+
+
+    ctx.fillStyle="#ffe000";
+
+    ctx.beginPath();
+
+    ctx.moveTo(cx,cy);
+
+    ctx.arc(
+        cx,
+        cy,
+        10,
+        angle+mouth,
+        angle-mouth+Math.PI*2
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+}
+
+
+// =========================
+// DESSIN FANTÔME
+// =========================
+
+function drawGhost(ghost){
+
+    const cx=
+        ghost.x*TILE+TILE/2;
+
+    const cy=
+        ghost.y*TILE+TILE/2;
+
+
+    ctx.fillStyle=ghost.color;
+
+    ctx.beginPath();
+
+    ctx.arc(
+        cx,
+        cy-2,
+        10,
+        Math.PI,
+        0
+    );
+
+    ctx.lineTo(cx+10,cy+9);
+
+    ctx.lineTo(cx+5,cy+6);
+
+    ctx.lineTo(cx,cy+10);
+
+    ctx.lineTo(cx-5,cy+6);
+
+    ctx.lineTo(cx-10,cy+9);
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    // yeux
+
+    ctx.fillStyle="#fff";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        cx-4,
+        cy-2,
+        3,
+        0,
+        Math.PI*2
+    );
+
+    ctx.arc(
+        cx+4,
+        cy-2,
+        3,
+        0,
+        Math.PI*2
+    );
+
+    ctx.fill();
+
+
+    ctx.fillStyle="#1111aa";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        cx-3,
+        cy-2,
+        1.5,
+        0,
+        Math.PI*2
+    );
+
+    ctx.arc(
+        cx+5,
+        cy-2,
+        1.5,
+        0,
+        Math.PI*2
+    );
+
+    ctx.fill();
+
+}
+
+
+// =========================
+// DESSIN COMPLET
+// =========================
+
+function draw(){
+
+    drawMaze();
+
+    for(const ghost of ghosts){
+
+        drawGhost(ghost);
+
+    }
+
+    drawPacman();
+
+}
+
+
+// =========================
+// MUSIQUE
+// =========================
+
+let audio;
+
+let musicTimer;
+
+const notes=[
+
+    262,330,392,523,
+    392,330,262,196,
+    220,262,330,392
+
+];
+
+
+function startMusic(){
+
+    if(!audio){
+
+        audio=
+            new (
+                window.AudioContext ||
+                window.webkitAudioContext
+            )();
+
+    }
+
+
+    if(audio.state==="suspended"){
+
+        audio.resume();
+
+    }
+
+
+    let i=0;
+
+
+    clearInterval(musicTimer);
+
+
+    musicTimer=setInterval(()=>{
+
+        if(!running){
+
+            return;
+
+        }
+
+
+        let oscillator=
+            audio.createOscillator();
+
+        let gain=
+            audio.createGain();
+
+
+        oscillator.type="square";
+
+        oscillator.frequency.value=
+            notes[i%notes.length];
+
+
+        gain.gain.value=0.025;
+
+
+        oscillator.connect(gain);
+
+        gain.connect(audio.destination);
+
+
+        oscillator.start();
+
+        oscillator.stop(
+            audio.currentTime+0.10
+        );
+
+
+        i++;
+
+    },150);
+
+}
+
+
+// =========================
+// PERDU
+// =========================
+
+function lose(){
+
+    running=false;
+
+    message.textContent="PERDU ! 💥";
+
+    restart.style.display="block";
+
+}
+
+
+// =========================
+// GAME LOOP
+// =========================
+
+function loop(time){
+
+    let delta=time-lastTime;
+
+    lastTime=time;
+
+
+    if(running){
+
+        playerTimer+=delta;
+
+        ghostTimer+=delta;
+
+
+        if(playerTimer>=120){
+
+            playerTimer=0;
+
+            movePacman();
+
+        }
+
+
+        if(ghostTimer>=180){
+
+            ghostTimer=0;
+
+            for(const ghost of ghosts){
+
+                moveGhost(ghost);
+
+            }
+
+        }
+
+
+        checkGhostCollision();
+
+
+        pacman.mouth+=0.2;
+
+    }
+
+
+    draw();
+
+
+    requestAnimationFrame(loop);
+
+}
+
+
+// =========================
+// DÉMARRER
+// =========================
+
+function startGame(){
+
+    score=0;
+
+    scoreText.textContent="0";
+
+    message.textContent="";
+
+    restart.style.display="none";
+
+    createMaze();
+
+    createPacman();
+
+    createGhosts();
+
+
+    running=true;
+
+
+    menu.style.display="none";
+
+    game.style.display="flex";
+
+
+    startMusic();
+
+}
+
+
+start.addEventListener(
+    "click",
+    startGame
+);
+
+
+restart.addEventListener(
+    "click",
+    startGame
+);
+
+
+// =========================
+// CLAVIER
+// =========================
+
+document.addEventListener(
+    "keydown",
+    function(e){
+
+        if(!running)return;
+
+
+        if(e.key==="ArrowUp" || e.key==="w"){
+
+            changeDirection({x:0,y:-1});
+
+        }
+
+        if(e.key==="ArrowDown" || e.key==="s"){
+
+            changeDirection({x:0,y:1});
+
+        }
+
+        if(e.key==="ArrowLeft" || e.key==="a"){
+
+            changeDirection({x:-1,y:0});
+
+        }
+
+        if(e.key==="ArrowRight" || e.key==="d"){
+
+            changeDirection({x:1,y:0});
+
+        }
+
+    }
+);
+
+
+// =========================
+// BOUTONS IPAD
+// =========================
+
+document.querySelectorAll(".control").forEach(button=>{
+
+    button.addEventListener(
+        "pointerdown",
+        function(e){
+
+            e.preventDefault();
+
+            if(!running)return;
+
+
+            const d=button.dataset.dir;
+
+
+            if(d==="up"){
+
+                changeDirection({x:0,y:-1});
+
+            }
+
+            if(d==="down"){
+
+                changeDirection({x:0,y:1});
+
+            }
+
+            if(d==="left"){
+
+                changeDirection({x:-1,y:0});
+
+            }
+
+            if(d==="right"){
+
+                changeDirection({x:1,y:0});
+
+            }
+
+        }
+    );
+
+});
+
+
+createMaze();
+
+createPacman();
+
+createGhosts();
+
+requestAnimationFrame(loop);
+
+</script>
+
+</body>
+</html>
